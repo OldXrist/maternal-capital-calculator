@@ -5,13 +5,18 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QSpinBox, QDoubleSpinBox, QGridLayout, QScrollArea)
 from PyQt6.QtCharts import QChart, QChartView, QPieSeries
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter
+from PyQt6.QtGui import QPainter, QIcon
+
+
+def fraction_to_str(numerator, denominator=1000):
+    """Convert numerator/denominator to string like '444/1000'"""
+    return f"{numerator}/{denominator}"
 
 
 class MaternalCapitalCalculator(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Калькулятор долей в квартире с материнским капиталом")
+        self.setWindowTitle("Калькулятор долей с материнским капиталом")
         self.setGeometry(100, 100, 800, 900)
 
         # Central widget
@@ -28,7 +33,7 @@ class MaternalCapitalCalculator(QMainWindow):
         input_layout.addWidget(QLabel("Количество детей:"), 0, 0)
         self.num_children_spin = QSpinBox()
         self.num_children_spin.setMinimum(0)
-        self.num_children_spin.setMaximum(10)  # Reasonable limit
+        self.num_children_spin.setMaximum(30)
         self.num_children_spin.valueChanged.connect(self.update_children_fields)
         input_layout.addWidget(self.num_children_spin, 0, 1)
 
@@ -62,7 +67,7 @@ class MaternalCapitalCalculator(QMainWindow):
         # Dynamic children names section
         self.children_scroll = QScrollArea()
         self.children_scroll.setWidgetResizable(True)
-        self.children_scroll.setFixedHeight(100)  # Adjust as needed
+        self.children_scroll.setFixedHeight(100)
         self.children_widget = QWidget()
         self.children_layout = QVBoxLayout(self.children_widget)
         self.children_scroll.setWidget(self.children_widget)
@@ -136,10 +141,6 @@ class MaternalCapitalCalculator(QMainWindow):
             note = QLabel("Нет детей")
             note.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.children_layout.addWidget(note)
-
-    def fraction_to_str(self, numerator, denominator=1000):
-        """Convert numerator/denominator to string like '444/1000'"""
-        return f"{numerator}/{denominator}"
 
     def calculate_shares(self):
         try:
@@ -250,21 +251,21 @@ class MaternalCapitalCalculator(QMainWindow):
 
             # Results text
             results = "• Доли супругов без учета мат. капитала •\n"
-            results += f"{parent1_name}: {self.fraction_to_str(parent_without_num)}\n"
-            results += f"{parent2_name}: {self.fraction_to_str(parent_without_num)}\n\n"
+            results += f"{parent1_name}: {fraction_to_str(parent_without_num)}\n"
+            results += f"{parent2_name}: {fraction_to_str(parent_without_num)}\n\n"
 
             results += "• Доли всех участников в части, приобретенной за счет мат.капитала •\n"
-            results += f"{parent1_name}: {self.fraction_to_str(child_share_num)}\n"
-            results += f"{parent2_name}: {self.fraction_to_str(child_share_num)}\n"
+            results += f"{parent1_name}: {fraction_to_str(child_share_num)}\n"
+            results += f"{parent2_name}: {fraction_to_str(child_share_num)}\n"
             for i, child_name in enumerate(children_names):
-                results += f"{child_name}: {self.fraction_to_str(child_share_num)}\n"
+                results += f"{child_name}: {fraction_to_str(child_share_num)}\n"
             results += "\n"
 
             results += "• Доли всех участников с учётом мат. капитала •\n"
-            results += f"{parent1_name}: {self.fraction_to_str(parent1_total_num)}\n"
-            results += f"{parent2_name}: {self.fraction_to_str(parent2_total_num)}\n"
+            results += f"{parent1_name}: {fraction_to_str(parent1_total_num)}\n"
+            results += f"{parent2_name}: {fraction_to_str(parent2_total_num)}\n"
             for i, child_name in enumerate(children_names):
-                results += f"{child_name}: {self.fraction_to_str(child_share_num)}\n"
+                results += f"{child_name}: {fraction_to_str(child_share_num)}\n"
 
             self.results_text.setText(results)
 
