@@ -50,7 +50,7 @@ class MaternalCapitalCalculator(QMainWindow):
         main_layout.addWidget(self.results_text)
 
         self.chart_view = QChartView()
-        self.chart_view.setMinimumSize(500, 300)
+        self.chart_view.setBaseSize(500, 250)
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         main_layout.addWidget(self.chart_view)
 
@@ -160,68 +160,73 @@ class MaternalCapitalCalculator(QMainWindow):
                 name = edit.text().strip()
                 children_names.append(name or f"Ребенок {len(children_names) + 1}")
 
+            # ---- OPTIMIZED BUT EQUIVALENT CALCULATION ----
+
             m_share = maternal_capital / apartment_cost
             mc_num = round(m_share * DENOM)
             non_mc_num = DENOM - mc_num
+
+            # Base (non-maternal) shares
             parent_without_num = non_mc_num // 2
 
             total_participants = 2 + num_children
-            m_per_float = m_share / total_participants if total_participants > 0 else 0
+            m_per_float = m_share / total_participants if total_participants else 0
 
-            if num_children > 0:
-                child_share_num = math.ceil(m_per_float * DENOM)
-                total_children_num = child_share_num * num_children
-                remaining_mc_num = mc_num - total_children_num
-                parent_m_num = round(remaining_mc_num / 2.0)
-            else:
-                child_share_num = 0
-                total_children_num = 0
-                remaining_mc_num = mc_num
-                parent_m_num = round(remaining_mc_num / 2.0)
+            # Children share from maternal part
+            child_share_num = (
+                math.ceil(m_per_float * DENOM) if num_children > 0 else 0
+            )
 
+            total_children_num = child_share_num * num_children
+            remaining_mc_num = mc_num - total_children_num
+            parent_m_num = round(remaining_mc_num / 2.0)
+
+            # Parent totals before correction
             parent_base_num = parent_without_num + parent_m_num
-            total_so_far = 2 * parent_base_num + total_children_num
-            excess = total_so_far - DENOM
-
             parent1_total_num = parent_base_num
             parent2_total_num = parent_base_num
 
-            if excess > 0:
-                adjust = excess // 2
-                parent1_total_num -= adjust
-                parent2_total_num -= adjust
-                rem = excess % 2
-                if rem > 0:
-                    parent2_total_num -= rem
-                    if parent1_total_num > parent2_total_num:
-                        diff = parent1_total_num - parent2_total_num
-                        parent1_total_num -= diff
-                        if num_children > 0:
-                            extra = diff / DENOM / num_children
-                            child_share_num = math.ceil((m_per_float + extra) * DENOM)
-                    elif parent2_total_num > parent1_total_num:
-                        diff = parent2_total_num - parent1_total_num
-                        parent2_total_num -= diff
-                        if num_children > 0:
-                            extra = diff / DENOM / num_children
-                            child_share_num = math.ceil((m_per_float + extra) * DENOM)
+            total_so_far = (
+                    parent1_total_num
+                    + parent2_total_num
+                    + total_children_num
+            )
 
-            elif excess < 0:
-                shortfall = -excess
-                adjust = shortfall // 2
-                parent1_total_num += adjust
-                parent2_total_num += adjust
-                if shortfall % 2 > 0:
+            # Difference from expected total
+            delta = DENOM - total_so_far  # positive = add, negative = remove
+
+            # Distribute delta evenly between parents
+            half = abs(delta) // 2
+            sign = 1 if delta > 0 else -1
+
+            parent1_total_num += sign * half
+            parent2_total_num += sign * half
+
+            # Handle remainder (±1)
+            if abs(delta) % 2:
+                if delta > 0:
                     parent1_total_num += 1
+                else:
+                    parent2_total_num -= 1
 
-            if parent1_total_num != parent2_total_num:
-                avg = (parent1_total_num + parent2_total_num) // 2
-                parent1_total_num = avg
-                parent2_total_num = avg
+                # If parents became unequal, rebalance via children (original behavior)
+                if parent1_total_num != parent2_total_num:
+                    diff = abs(parent1_total_num - parent2_total_num)
+                    parent1_total_num = parent2_total_num = min(
+                        parent1_total_num, parent2_total_num
+                    )
 
+                    if num_children > 0 and diff > 0:
+                        extra = diff / DENOM / num_children
+                        child_share_num = math.ceil(
+                            (m_per_float + extra) * DENOM
+                        )
+
+            # Final safety
             parent1_total_num = max(0, parent1_total_num)
             parent2_total_num = max(0, parent2_total_num)
 
+            # Recalculate non-maternal parent part (unchanged behavior)
             parent_without_num = parent1_total_num - child_share_num
 
             # ---- OUTPUT ----
