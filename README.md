@@ -15,7 +15,6 @@
 
 ## Требования
 - Python 3.8+.
-- PyQt6 и PyQt6-Charts: `pip install PyQt6 PyQt6-Charts`.
 
 ## Установка
 1. Клонируйте или скачайте проект.
