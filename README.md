@@ -31,5 +31,5 @@
 
 ## Сборка исполняемого файла
 Используйте PyInstaller для создания автономного .exe:
-`pip install pyinstaller`
-`pyinstaller --onefile --windowed --name=MaternalCalculator main.py`
+1. `pip install pyinstallerр`
+2. `pyinstaller --onefile --windowed --name=MaternalCalculator main.py`
