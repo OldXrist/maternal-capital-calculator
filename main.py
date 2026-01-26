@@ -4,7 +4,7 @@ import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QLabel, QLineEdit, QPushButton, QTextEdit,
-    QSpinBox, QDoubleSpinBox,
+    QSpinBox, QDoubleSpinBox, QCheckBox,
     QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea
 )
 from PyQt6.QtCharts import QChart, QChartView, QPieSeries
@@ -50,7 +50,6 @@ class MaternalCapitalCalculator(QMainWindow):
         main_layout.addWidget(self.results_text)
 
         self.chart_view = QChartView()
-        self.chart_view.setBaseSize(500, 250)
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         main_layout.addWidget(self.chart_view)
 
@@ -63,32 +62,38 @@ class MaternalCapitalCalculator(QMainWindow):
         layout.addWidget(self.num_children_spin, 0, 1)
 
         layout.addWidget(QLabel("Стоимость квартиры (руб.):"), 1, 0)
-        self.apartment_cost_spin = QDoubleSpinBox(
-            minimum=0, maximum=999_999_999, decimals=2
-        )
+        self.apartment_cost_spin = QDoubleSpinBox(minimum=0, maximum=999_999_999, decimals=2)
         layout.addWidget(self.apartment_cost_spin, 1, 1)
 
         layout.addWidget(QLabel("Использованный материнский капитал (руб.):"), 2, 0)
-        self.maternal_capital_spin = QDoubleSpinBox(
-            minimum=0, maximum=999_999_999, decimals=2
-        )
+        self.maternal_capital_spin = QDoubleSpinBox(minimum=0, maximum=999_999_999, decimals=2)
         layout.addWidget(self.maternal_capital_spin, 2, 1)
 
-        layout.addWidget(QLabel("ФИО родителя 1 (опционально):"), 3, 0)
+        layout.addWidget(QLabel("ФИО родителя 1:"), 3, 0)
         self.parent1_name_edit = QLineEdit()
         layout.addWidget(self.parent1_name_edit, 3, 1)
 
-        layout.addWidget(QLabel("ФИО родителя 2 (опционально):"), 4, 0)
-        self.parent2_name_edit = QLineEdit()
-        layout.addWidget(self.parent2_name_edit, 4, 1)
+        layout.addWidget(QLabel("ФИО родителя 2:"), 4, 0)
 
+        row = QHBoxLayout()
+        self.parent2_name_edit = QLineEdit()
+        row.addWidget(self.parent2_name_edit)
+
+        self.parent2_checkbox = QCheckBox("Участвует")
+        self.parent2_checkbox.setChecked(True)
+        self.parent2_checkbox.toggled.connect(
+            lambda c: self.parent2_name_edit.setEnabled(c)
+        )
+        row.addWidget(self.parent2_checkbox)
+
+        layout.addLayout(row, 4, 1)
         return layout
 
     def _build_children_block(self):
         wrapper = QWidget()
         layout = QVBoxLayout(wrapper)
 
-        layout.addWidget(QLabel("ФИО детей (опционально):"))
+        layout.addWidget(QLabel("ФИО детей:"))
 
         self.children_scroll = QScrollArea(widgetResizable=True)
         self.children_scroll.setFixedHeight(120)
@@ -125,10 +130,8 @@ class MaternalCapitalCalculator(QMainWindow):
         for i in range(count):
             row = QHBoxLayout()
             row.addWidget(QLabel(f"Ребенок {i + 1}:"))
-
             edit = QLineEdit(self.children_names[i])
             row.addWidget(edit)
-
             self.children_layout.addLayout(row)
             self.children_name_edits.append(edit)
 
@@ -141,6 +144,8 @@ class MaternalCapitalCalculator(QMainWindow):
             elif item.layout():
                 MaternalCapitalCalculator._clear_layout(item.layout())
 
+    # ------------------------------------------------ Calculation
+
     def calculate_shares(self):
         try:
             num_children = self.num_children_spin.value()
@@ -150,145 +155,102 @@ class MaternalCapitalCalculator(QMainWindow):
             if apartment_cost <= 0:
                 raise ValueError("Стоимость квартиры должна быть положительной.")
             if maternal_capital < 0 or maternal_capital > apartment_cost:
-                raise ValueError("Материнский капитал должен быть между 0 и стоимостью квартиры.")
+                raise ValueError("Материнский капитал вне допустимого диапазона.")
+
+            two_parents = self.parent2_checkbox.isChecked()
+            num_parents = 2 if two_parents else 1
 
             parent1_name = self.parent1_name_edit.text().strip() or "Родитель 1"
             parent2_name = self.parent2_name_edit.text().strip() or "Родитель 2"
 
-            children_names = []
-            for edit in self.children_name_edits:
-                name = edit.text().strip()
-                children_names.append(name or f"Ребенок {len(children_names) + 1}")
+            children_names = [
+                e.text().strip() or f"Ребенок {i+1}"
+                for i, e in enumerate(self.children_name_edits)
+            ]
 
-            # ---- OPTIMIZED BUT EQUIVALENT CALCULATION ----
+            # ---------------- BASE SHARES ----------------
 
             m_share = maternal_capital / apartment_cost
             mc_num = round(m_share * DENOM)
             non_mc_num = DENOM - mc_num
 
-            # Base (non-maternal) shares
-            parent_without_num = non_mc_num // 2
-
-            total_participants = 2 + num_children
+            total_participants = num_parents + num_children
             m_per_float = m_share / total_participants if total_participants else 0
-
-            # Children share from maternal part
-            child_share_num = (
-                math.ceil(m_per_float * DENOM) if num_children > 0 else 0
-            )
+            child_share_num = math.ceil(m_per_float * DENOM) if num_children else 0
 
             total_children_num = child_share_num * num_children
             remaining_mc_num = mc_num - total_children_num
-            parent_m_num = round(remaining_mc_num / 2.0)
 
-            # Parent totals before correction
-            parent_base_num = parent_without_num + parent_m_num
-            parent1_total_num = parent_base_num
-            parent2_total_num = parent_base_num
+            # ---------------- PARENTS ----------------
 
-            total_so_far = (
-                    parent1_total_num
-                    + parent2_total_num
-                    + total_children_num
-            )
+            if num_parents == 2:
+                parent_without_num = non_mc_num // 2
+                parent_m_num = round(remaining_mc_num / 2)
+                parent1_total = parent2_total = parent_without_num + parent_m_num
 
-            # Difference from expected total
-            delta = DENOM - total_so_far  # positive = add, negative = remove
+                total = parent1_total * 2 + total_children_num
+                delta = DENOM - total
 
-            # Distribute delta evenly between parents
-            half = abs(delta) // 2
-            sign = 1 if delta > 0 else -1
+                if delta:
+                    half = delta // 2
+                    parent1_total += half
+                    parent2_total += half
+                    if delta % 2:
+                        parent1_total += 1
+                        parent1_total = parent2_total = min(parent1_total, parent2_total)
 
-            parent1_total_num += sign * half
-            parent2_total_num += sign * half
+            else:
+                parent_without_num = non_mc_num
+                parent1_total = non_mc_num + remaining_mc_num
+                parent2_total = 0
 
-            # Handle remainder (±1)
-            if abs(delta) % 2:
-                if delta > 0:
-                    parent1_total_num += 1
+            # ---------------- FINAL SAFETY ----------------
+
+            final_sum = parent1_total + parent2_total + total_children_num
+            delta = DENOM - final_sum
+
+            if delta != 0:
+                if num_children > 0:
+                    # Push rounding error into children first
+                    child_share_num += delta // num_children
                 else:
-                    parent2_total_num -= 1
+                    # No children → split between parents
+                    half = delta // 2
+                    parent1_total += half
+                    parent2_total += half
 
-                # If parents became unequal, rebalance via children (original behavior)
-                if parent1_total_num != parent2_total_num:
-                    diff = abs(parent1_total_num - parent2_total_num)
-                    parent1_total_num = parent2_total_num = min(
-                        parent1_total_num, parent2_total_num
-                    )
+            # ---------------- OUTPUT ----------------
 
-                    if num_children > 0 and diff > 0:
-                        extra = diff / DENOM / num_children
-                        child_share_num = math.ceil(
-                            (m_per_float + extra) * DENOM
-                        )
-
-            # Final safety
-            parent1_total_num = max(0, parent1_total_num)
-            parent2_total_num = max(0, parent2_total_num)
-
-            # Recalculate non-maternal parent part (unchanged behavior)
-            parent_without_num = parent1_total_num - child_share_num
-
-            # ---- FINAL SAFETY CHECK: FORCE TOTAL = 1000 ----
-
-            final_total = (
-                    parent1_total_num
-                    + parent2_total_num
-                    + child_share_num * num_children
+            result = (
+                f"Доля мат. капитала в жилом помещении: {fraction_to_str(mc_num)}\n"
+                f"Доля собственных средств в жилом помещении: {fraction_to_str(non_mc_num)}\n\n"
             )
 
-            correction = DENOM - final_total
-
-            if correction != 0:
-                # Apply correction ONLY to parents
-                half = correction // 2
-                rem = correction % 2
-
-                parent1_total_num += half
-                parent2_total_num += half
-
-                # If odd remainder, give it to parent 1
-                parent1_total_num += rem
-
-                # Absolute safety: no negatives
-                parent1_total_num = max(0, parent1_total_num)
-                parent2_total_num = max(0, parent2_total_num)
-
-                # Recalculate parent non-maternal part
-                parent_without_num = parent1_total_num - child_share_num
-
-            # ---- OUTPUT ----
-
-            result = "• Доли супругов без учета мат. капитала •\n"
+            result += "• Доли без учета мат. капитала •\n"
             result += f"{parent1_name}: {fraction_to_str(parent_without_num)}\n"
-            result += f"{parent2_name}: {fraction_to_str(parent_without_num)}\n\n"
+            if two_parents:
+                result += f"{parent2_name}: {fraction_to_str(parent_without_num)}\n"
 
-            result += "• Доли всех участников в части, приобретенной за счет мат.капитала •\n"
-            result += f"{parent1_name}: {fraction_to_str(child_share_num)}\n"
-            result += f"{parent2_name}: {fraction_to_str(child_share_num)}\n"
-            for child in children_names:
-                result += f"{child}: {fraction_to_str(child_share_num)}\n"
-
-            result += "\n• Доли всех участников с учётом мат. капитала •\n"
-            result += f"{parent1_name}: {fraction_to_str(parent1_total_num)}\n"
-            result += f"{parent2_name}: {fraction_to_str(parent2_total_num)}\n"
+            result += "\n• Доли с учетом мат. капитала •\n"
+            result += f"{parent1_name}: {fraction_to_str(parent1_total)}\n"
+            if two_parents:
+                result += f"{parent2_name}: {fraction_to_str(parent2_total)}\n"
             for child in children_names:
                 result += f"{child}: {fraction_to_str(child_share_num)}\n"
 
             self.results_text.setText(result)
 
-            # Chart
             series = QPieSeries()
-            series.append(parent1_name, parent1_total_num / DENOM * 100)
-            series.append(parent2_name, parent2_total_num / DENOM * 100)
+            series.append(parent1_name, parent1_total / DENOM * 100)
+            if two_parents:
+                series.append(parent2_name, parent2_total / DENOM * 100)
             for child in children_names:
                 series.append(child, child_share_num / DENOM * 100)
 
             chart = QChart()
             chart.addSeries(series)
-            chart.setTitle("Распределение долей в квартире (%)")
+            chart.setTitle("Распределение долей (%)")
             chart.legend().setAlignment(Qt.AlignmentFlag.AlignRight)
-
             self.chart_view.setChart(chart)
 
         except Exception as e:
