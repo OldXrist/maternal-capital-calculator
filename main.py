@@ -229,6 +229,34 @@ class MaternalCapitalCalculator(QMainWindow):
             # Recalculate non-maternal parent part (unchanged behavior)
             parent_without_num = parent1_total_num - child_share_num
 
+            # ---- FINAL SAFETY CHECK: FORCE TOTAL = 1000 ----
+
+            final_total = (
+                    parent1_total_num
+                    + parent2_total_num
+                    + child_share_num * num_children
+            )
+
+            correction = DENOM - final_total
+
+            if correction != 0:
+                # Apply correction ONLY to parents
+                half = correction // 2
+                rem = correction % 2
+
+                parent1_total_num += half
+                parent2_total_num += half
+
+                # If odd remainder, give it to parent 1
+                parent1_total_num += rem
+
+                # Absolute safety: no negatives
+                parent1_total_num = max(0, parent1_total_num)
+                parent2_total_num = max(0, parent2_total_num)
+
+                # Recalculate parent non-maternal part
+                parent_without_num = parent1_total_num - child_share_num
+
             # ---- OUTPUT ----
 
             result = "• Доли супругов без учета мат. капитала •\n"
