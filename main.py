@@ -227,9 +227,9 @@ class MaternalCapitalCalculator(QMainWindow):
             )
 
             result += "• Доли без учета мат. капитала •\n"
-            result += f"{parent1_name}: {fraction_to_str(parent_without_num)}\n"
+            result += f"{parent1_name}: {fraction_to_str(parent1_total - child_share_num)}\n"
             if two_parents:
-                result += f"{parent2_name}: {fraction_to_str(parent_without_num)}\n"
+                result += f"{parent2_name}: {fraction_to_str(parent1_total - child_share_num)}\n"
 
             result += "\n• Доли с учетом мат. капитала •\n"
             result += f"{parent1_name}: {fraction_to_str(parent1_total)}\n"
